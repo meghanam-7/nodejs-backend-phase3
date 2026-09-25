@@ -1,0 +1,40 @@
+# Dependencies
+node_modules/
+
+# Environment variables
+.env
+.env.test
+
+# Logs
+*.log
+
+# OS files
+.DS_Store
+Thumbs.db
+/src/generated/prisma
+
+
+jest.config.jest
+
+# Test coverage
+coverage/
+
+
+.github/workflows/test.yml
+
+
+
+*.dump
+
+
+# Local development / AI tooling
+.agents/
+.claude/
+.windsurf/
+
+# Local standalone test / utility scripts
+client.js
+testCacheStampede.js
+testLoad.js
+testRedisCache.js
+skills-lock.json

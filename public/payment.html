@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <title>Placemux Razorpay Test Payment</title>
+
+    <script src="https://checkout.razorpay.com/v1/checkout.js"></script>
+
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 600px;
+            margin: 50px auto;
+            padding: 20px;
+        }
+
+        input {
+            width: 100%;
+            padding: 10px;
+            margin: 8px 0 15px;
+            box-sizing: border-box;
+        }
+
+        button {
+            padding: 12px 20px;
+            cursor: pointer;
+        }
+
+        #result {
+            margin-top: 20px;
+            white-space: pre-wrap;
+        }
+    </style>
+</head>
+
+<body>
+
+    <h1>Razorpay Test Payment</h1>
+
+    <label>Student JWT</label>
+    <input
+        id="token"
+        type="text"
+        placeholder="Paste your JWT token"
+    >
+
+    <label>Job ID</label>
+    <input
+        id="jobId"
+        type="number"
+        value="1"
+    >
+
+    <label>Amount (paise)</label>
+    <input
+        id="amount"
+        type="number"
+        value="10000"
+    >
+
+    <button onclick="createPayment()">
+        Pay ₹100
+    </button>
+
+    <div id="result"></div>
+
+    <script>
+        async function createPayment() {
+            const token = document.getElementById("token").value;
+            const jobId = Number(
+                document.getElementById("jobId").value
+            );
+            const amount = Number(
+                document.getElementById("amount").value
+            );
+
+            const result = document.getElementById("result");
+
+            result.textContent = "Creating payment order...";
+
+            try {
+                const response = await fetch(
+                    "/api/payments/orders",
+                    {
+                        method: "POST",
+                        headers: {
+                            "Content-Type": "application/json",
+                            "Authorization": `Bearer ${token}`
+                        },
+                        body: JSON.stringify({
+                            jobId,
+                            amount
+                        })
+                    }
+                );
+
+                const data = await response.json();
+
+                if (!response.ok) {
+                    throw new Error(
+                        data.message || "Failed to create payment order"
+                    );
+                }
+
+                const razorpayOrder = data.data.razorpayOrder;
+
+                result.textContent =
+                    "Payment order created.\n" +
+                    "Order ID: " +
+                    razorpayOrder.id;
+
+                const options = {
+                    key: "rzp_test_TT7ms5gxlm3NCs",
+
+                    amount: razorpayOrder.amount,
+
+                    currency: razorpayOrder.currency,
+
+                    name: "Placemux",
+
+                    description: "Job Application Payment",
+
+                    order_id: razorpayOrder.id,
+
+                    handler: async function (response) {
+                        result.textContent =
+                            "Payment successful.\n" +
+                            "Payment ID: " +
+                            response.razorpay_payment_id +
+                            "\n\nVerifying payment...";
+
+                        await verifyPayment(
+                            token,
+                            response.razorpay_order_id,
+                            response.razorpay_payment_id
+                        );
+                    },
+
+                    prefill: {
+                        name: "Test Student"
+                    },
+
+                    theme: {
+                        color: "#3399cc"
+                    }
+                };
+
+                const razorpay = new Razorpay(options);
+
+                razorpay.on(
+                    "payment.failed",
+                    function (response) {
+                        result.textContent =
+                            "Payment failed.\n\n" +
+                            JSON.stringify(
+                                response.error,
+                                null,
+                                2
+                            );
+                    }
+                );
+
+                razorpay.open();
+
+            } catch (error) {
+                result.textContent =
+                    "Error:\n" + error.message;
+            }
+        }
+
+        async function verifyPayment(
+            token,
+            razorpayOrderId,
+            razorpayPaymentId
+        ) {
+            try {
+                const response = await fetch(
+                    "/api/payments/verify",
+                    {
+                        method: "POST",
+                        headers: {
+                            "Content-Type": "application/json",
+                            "Authorization": `Bearer ${token}`
+                        },
+                        body: JSON.stringify({
+                            razorpayOrderId,
+                            razorpayPaymentId
+                        })
+                    }
+                );
+
+                const data = await response.json();
+
+                document.getElementById("result").textContent =
+                    JSON.stringify(data, null, 2);
+
+            } catch (error) {
+                document.getElementById("result").textContent =
+                    "Verification error:\n" +
+                    error.message;
+            }
+        }
+    </script>
+
+</body>
+</html>

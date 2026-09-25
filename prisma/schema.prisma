@@ -1,0 +1,451 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           Int           @id @default(autoincrement())
+  name         String
+  email        String        @unique
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+  password     String
+  role         String        @default("USER")
+  company      Company?      @relation("CompanyOwner")
+  orders       Order[]
+  applications Application[]
+  payments     Payment[]
+  offers       Offer[]
+  interviews   Interview[]
+  consents     Consent[]
+
+  incidents      Incident[]
+  incidentEvents IncidentEvent[]
+  defects        Defect[]
+  backlogItems   BacklogItem[]
+  postmortems    Postmortem[]
+}
+
+model Product {
+  id        Int      @id @default(autoincrement())
+  name      String
+  price     Float
+  stock     Int
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  orders    Order[]
+}
+
+model Order {
+  id         Int      @id @default(autoincrement())
+  quantity   Int
+  totalPrice Float
+  status     String   @default("Pending")
+  userId     Int
+  productId  Int
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  product    Product  @relation(fields: [productId], references: [id])
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Company {
+  id          Int             @id @default(autoincrement())
+  name        String
+  legalName   String
+  slug        String          @unique
+  status      String          @default("ONBOARDING")
+  ownerUserId Int             @unique
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+  owner       User            @relation("CompanyOwner", fields: [ownerUserId], references: [id], onDelete: Cascade)
+  kyc         CompanyKyc?
+  profile     CompanyProfile?
+  jobs        Job[]
+}
+
+model CompanyProfile {
+  id          Int      @id @default(autoincrement())
+  companyId   Int      @unique
+  website     String?
+  description String?
+  industry    String?
+  companySize String?
+  phone       String?
+  address     String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  company     Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+}
+
+model CompanyKyc {
+  id              Int       @id @default(autoincrement())
+  companyId       Int       @unique
+  status          String    @default("NOT_STARTED")
+  submittedAt     DateTime?
+  verifiedAt      DateTime?
+  rejectionReason String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  company         Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+}
+
+model Job {
+  id             Int                 @id @default(autoincrement())
+  companyId      Int
+  title          String
+  description    String
+  location       String?
+  employmentType String?
+  status         String              @default("DRAFT")
+  publishedAt    DateTime?
+  createdAt      DateTime            @default(now())
+  updatedAt      DateTime            @updatedAt
+  company        Company             @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  assessments    JobAssessment?
+  thresholds     JobSkillThreshold[]
+  applications   Application[]
+  payments       Payment[]
+  offers         Offer[]
+  interviews     Interview[]
+
+  @@index([companyId])
+  @@index([status])
+}
+
+model Competency {
+  id          Int                 @id @default(autoincrement())
+  code        String              @unique
+  name        String
+  description String?
+  createdAt   DateTime            @default(now())
+  updatedAt   DateTime            @updatedAt
+  thresholds  JobSkillThreshold[]
+}
+
+model JobSkillThreshold {
+  id           Int        @id @default(autoincrement())
+  jobId        Int
+  competencyId Int
+  minimumLevel Int
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+  competency   Competency @relation(fields: [competencyId], references: [id], onDelete: Cascade)
+  job          Job        @relation(fields: [jobId], references: [id], onDelete: Cascade)
+
+  @@unique([jobId, competencyId])
+  @@index([jobId])
+  @@index([competencyId])
+}
+
+model JobAssessment {
+  id        Int       @id @default(autoincrement())
+  jobId     Int       @unique
+  token     String    @unique
+  status    String    @default("ACTIVE")
+  createdAt DateTime  @default(now())
+  expiresAt DateTime?
+  job       Job       @relation(fields: [jobId], references: [id], onDelete: Cascade)
+
+  @@index([jobId])
+}
+
+model Application {
+  id        Int      @id @default(autoincrement())
+  jobId     Int
+  studentId Int
+  status    String   @default("APPLIED")
+  appliedAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  job     Job  @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  student User @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  offer Offer?
+
+  interviews Interview[]
+
+  statusHistory ApplicationStatusHistory[]
+
+  @@unique([jobId, studentId])
+  @@index([jobId])
+  @@index([studentId])
+  @@index([status])
+}
+
+model Offer {
+  id            Int @id @default(autoincrement())
+  applicationId Int @unique
+  studentId     Int
+  jobId         Int
+
+  compensation Int
+  currency     String    @default("INR")
+  joiningDate  DateTime?
+
+  status String @default("DRAFT")
+
+  documentUrl String?
+
+  eSignProvider  String?
+  eSignStatus    String    @default("NOT_STARTED")
+  eSignRequestId String?
+  signedAt       DateTime?
+
+  // Tamper-evident hash of the signed offer
+  signedHash String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  application Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  student     User        @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  job         Job         @relation(fields: [jobId], references: [id], onDelete: Cascade)
+
+  @@index([studentId])
+  @@index([jobId])
+  @@index([status])
+  @@index([eSignStatus])
+}
+
+model Payment {
+  id                Int      @id @default(autoincrement())
+  userId            Int
+  jobId             Int
+  amount            Int
+  currency          String   @default("INR")
+  status            String   @default("CREATED")
+  razorpayOrderId   String   @unique
+  razorpayPaymentId String?
+  receipt           String?
+  idempotencyKey    String?  @unique
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  user            User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  job             Job              @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  refunds         Refund[]
+  reconciliations Reconciliation[]
+
+  @@index([userId])
+  @@index([jobId])
+  @@index([status])
+}
+
+model Refund {
+  id               Int      @id @default(autoincrement())
+  paymentId        Int
+  amount           Int
+  currency         String   @default("INR")
+  status           String   @default("CREATED")
+  razorpayRefundId String?  @unique
+  idempotencyKey   String?  @unique
+  reason           String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  payment Payment @relation(fields: [paymentId], references: [id], onDelete: Cascade)
+
+  @@index([paymentId])
+  @@index([status])
+}
+
+model Reconciliation {
+  id                   Int      @id @default(autoincrement())
+  paymentId            Int
+  status               String
+  localAmount          Int
+  gatewayAmount        Int?
+  localPaymentStatus   String
+  gatewayPaymentStatus String?
+  mismatchReason       String?
+  reconciledAt         DateTime @default(now())
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  payment Payment @relation(fields: [paymentId], references: [id], onDelete: Cascade)
+
+  @@index([paymentId])
+  @@index([status])
+}
+
+model Interview {
+  id            Int @id @default(autoincrement())
+  applicationId Int
+  jobId         Int
+  studentId     Int
+
+  scheduledAt DateTime
+  duration    Int      @default(60)
+
+  status String @default("SCHEDULED")
+
+  meetingUrl String?
+  notes      String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  application Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  job         Job         @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  student     User        @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@unique([applicationId])
+  @@index([jobId])
+  @@index([studentId])
+  @@index([scheduledAt])
+  @@index([status])
+}
+
+model ApplicationStatusHistory {
+  id            Int      @id @default(autoincrement())
+  applicationId Int
+  status        String
+  createdAt     DateTime @default(now())
+
+  application Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+
+  @@index([applicationId])
+  @@index([status])
+  @@index([createdAt])
+}
+
+model Consent {
+  id          Int       @id @default(autoincrement())
+  userId      Int
+  purpose     String
+  granted     Boolean   @default(false)
+  version     String
+  grantedAt   DateTime?
+  withdrawnAt DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, purpose])
+  @@index([userId])
+  @@index([purpose])
+  @@index([granted])
+}
+
+model Incident {
+  id             Int       @id @default(autoincrement())
+  title          String
+  description    String?
+  severity       String
+  status         String    @default("OPEN")
+  ownerUserId    Int
+  idempotencyKey String    @unique
+  detectedAt     DateTime  @default(now())
+  resolvedAt     DateTime?
+  closedAt       DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  owner      User            @relation(fields: [ownerUserId], references: [id], onDelete: Cascade)
+  events     IncidentEvent[]
+  defects    Defect[]
+  postmortem Postmortem?
+
+  @@index([ownerUserId])
+  @@index([severity])
+  @@index([status])
+  @@index([createdAt])
+}
+
+model IncidentEvent {
+  id          Int      @id @default(autoincrement())
+  incidentId  Int
+  actorUserId Int
+  eventType   String
+  message     String
+  createdAt   DateTime @default(now())
+
+  incident Incident @relation(fields: [incidentId], references: [id], onDelete: Cascade)
+  actor    User     @relation(fields: [actorUserId], references: [id], onDelete: Cascade)
+
+  @@index([incidentId])
+  @@index([actorUserId])
+  @@index([createdAt])
+}
+
+model Defect {
+  id              Int      @id @default(autoincrement())
+  incidentId      Int
+  title           String
+  description     String
+  severity        String
+  priority        Int
+  status          String   @default("OPEN")
+  ownerUserId     Int
+  source          String
+  endpoint        String?
+  httpStatus      Int?
+  evidence        String?
+  occurrenceCount Int      @default(1)
+  idempotencyKey  String   @unique
+  detectedAt      DateTime @default(now())
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  incident     Incident      @relation(fields: [incidentId], references: [id], onDelete: Cascade)
+  owner        User          @relation(fields: [ownerUserId], references: [id], onDelete: Cascade)
+  backlogItems BacklogItem[]
+
+  @@index([incidentId])
+  @@index([ownerUserId])
+  @@index([severity])
+  @@index([priority])
+  @@index([status])
+  @@index([createdAt])
+}
+
+model BacklogItem {
+  id             Int       @id @default(autoincrement())
+  defectId       Int
+  title          String
+  description    String?
+  priority       Int
+  status         String    @default("TODO")
+  ownerUserId    Int
+  dueDate        DateTime?
+  idempotencyKey String    @unique
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  defect Defect @relation(fields: [defectId], references: [id], onDelete: Cascade)
+  owner  User   @relation(fields: [ownerUserId], references: [id], onDelete: Cascade)
+
+  @@index([defectId])
+  @@index([ownerUserId])
+  @@index([priority])
+  @@index([status])
+  @@index([createdAt])
+}
+
+model Postmortem {
+  id                Int      @id @default(autoincrement())
+  incidentId        Int      @unique
+  createdByUserId   Int
+  summary           String
+  impact            String
+  rootCause         String
+  timeline          String?
+  correctiveActions String
+  preventiveActions String
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  idempotencyKey String @unique
+
+  incident  Incident @relation(fields: [incidentId], references: [id], onDelete: Cascade)
+  createdBy User     @relation(fields: [createdByUserId], references: [id], onDelete: Cascade)
+
+  @@index([createdByUserId])
+  @@index([createdAt])
+}
