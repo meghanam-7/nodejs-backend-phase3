@@ -9,27 +9,34 @@ const swaggerSpec = require("./docs/swagger");
 
 const { apiRateLimiter } = require("./middleware/rateLimiter");
 
+const {
+    sloMetricsMiddleware,
+} = require("./middleware/sloMetricsMiddleware");
+
+
 const app = express();
 
 if (process.env.NODE_ENV === "production") {
-    app.set("trust proxy", 1);
+app.set("trust proxy", 1);
 }
 
 // Middleware
 app.use(timeout("10s"));
 
 /*
- * Razorpay webhook requires the original raw request body
- * for HMAC signature verification.
- *
- * This MUST run before express.json().
- */
+
+Razorpay webhook requires the original raw request body
+for HMAC signature verification.
+
+
+This MUST run before express.json().
+*/
 app.use(
-    "/api/payments/webhook",
-    express.raw({
-        type: "application/json",
-        limit: "1mb",
-    })
+"/api/payments/webhook",
+express.raw({
+type: "application/json",
+limit: "1mb",
+})
 );
 
 app.use(express.json({ limit: "1mb" }));
@@ -39,28 +46,30 @@ app.use(helmet());
 
 // Enforce HTTPS in production
 app.use((req, res, next) => {
-    if (
-        process.env.NODE_ENV === "production" &&
-        !req.secure
-    ) {
-        return res.status(400).json({
-            success: false,
-            message: "HTTPS is required in production.",
-        });
-    }
+if (
+process.env.NODE_ENV === "production" &&
+!req.secure
+) {
+return res.status(400).json({
+success: false,
+message: "HTTPS is required in production.",
+});
+}
 
-    next();
+next();
+
 });
 
 app.use(
-    cors({
-        origin: ["http://localhost:3000"],
-        methods: ["GET", "POST", "PUT", "PATCH", "DELETE"],
-        allowedHeaders: ["Content-Type", "Authorization"],
-    })
+cors({
+origin: ["http://localhost:3000"],
+methods: ["GET", "POST", "PUT", "PATCH", "DELETE"],
+allowedHeaders: ["Content-Type", "Authorization"],
+})
 );
 
 app.use(compression());
+app.use(sloMetricsMiddleware);
 
 // Import Routes
 const healthRoutes = require("./routes/healthRoutes");
@@ -83,6 +92,7 @@ const interviewRoutes = require("./routes/interviewRoutes");
 const applicationStatusRoutes = require("./routes/applicationStatusRoutes");
 const consentRoutes = require("./routes/consentRoutes");
 const userRoutes = require("./routes/userRoutes");
+const sloRoutes = require("./routes/sloRoutes");
 
 // Public routes
 app.use("/", healthRoutes);
@@ -99,11 +109,12 @@ app.use("/", interviewRoutes);
 app.use(applicationStatusRoutes);
 app.use("/", userRoutes);
 
+
 // Swagger API documentation
 app.use(
-    "/api-docs",
-    swaggerUi.serve,
-    swaggerUi.setup(swaggerSpec)
+"/api-docs",
+swaggerUi.serve,
+swaggerUi.setup(swaggerSpec)
 );
 
 // Apply API rate limiter to all /api routes
@@ -119,41 +130,45 @@ app.use("/", cacheMetricsRoutes);
 // Consent routes
 app.use("/", consentRoutes);
 
+// SLO / Observability routes
+app.use("/", sloRoutes);
+
 // Payment routes
 // paymentRoutes already defines:
 // /payments/orders
 // /payments/verify
-// /payments/:paymentId/receipt
-// /payments/:paymentId/refund
-// /payments/:paymentId/reconcile
+// /payments//receipt
+// /payments//refund
+// /payments//reconcile
 //
 // Mounting under /api makes the final endpoints:
 // /api/payments/orders
 // /api/payments/verify
-// /api/payments/:paymentId/receipt
-// /api/payments/:paymentId/refund
-// /api/payments/:paymentId/reconcile
+// /api/payments//receipt
+// /api/payments//refund
+// /api/payments//reconcile
 app.use("/api", paymentRoutes);
 
 // Global production-safe error handler
 app.use((err, req, res, next) => {
-    console.error("Unhandled application error:", err);
+console.error("Unhandled application error:", err);
 
-    if (err && err.code === "ETIMEDOUT") {
-        return res.status(503).json({
-            success: false,
-            message: "Request timed out. Please try again later.",
-        });
-    }
-
-    const isProduction = process.env.NODE_ENV === "production";
-
-    return res.status(500).json({
+if (err && err.code === "ETIMEDOUT") {
+    return res.status(503).json({
         success: false,
-        message: isProduction
-            ? "Internal server error."
-            : err.message || "Internal server error.",
+        message: "Request timed out. Please try again later.",
     });
+}
+
+const isProduction = process.env.NODE_ENV === "production";
+
+return res.status(500).json({
+    success: false,
+    message: isProduction
+        ? "Internal server error."
+        : err.message || "Internal server error.",
+});
+
 });
 
 module.exports = app;

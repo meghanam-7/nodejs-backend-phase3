@@ -196,7 +196,6 @@ model Offer {
   eSignRequestId String?
   signedAt       DateTime?
 
-  // Tamper-evident hash of the signed offer
   signedHash String?
 
   createdAt DateTime @default(now())
@@ -448,4 +447,49 @@ model Postmortem {
 
   @@index([createdByUserId])
   @@index([createdAt])
+}
+
+model Slo {
+  id                 Int      @id @default(autoincrement())
+  name               String
+  endpoint           String
+  method             String
+  description        String?
+  availabilityTarget Float
+  latencyTargetMs    Int
+  correctnessTarget  Float
+  window             String   @default("30d")
+  enabled            Boolean  @default(true)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  measurements SloMeasurement[]
+
+  @@unique([method, endpoint])
+  @@index([enabled])
+  @@index([endpoint])
+}
+
+model SloMeasurement {
+  id              Int      @id @default(autoincrement())
+  sloId           Int
+  windowStart     DateTime
+  windowEnd       DateTime
+  requestCount    Int      @default(0)
+  successCount    Int      @default(0)
+  errorCount      Int      @default(0)
+  correctCount    Int      @default(0)
+  latencyP95Ms    Float?
+  availability    Float?
+  correctness     Float?
+  errorBudgetUsed Float?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  slo Slo @relation(fields: [sloId], references: [id], onDelete: Cascade)
+
+  @@unique([sloId, windowStart, windowEnd])
+  @@index([sloId])
+  @@index([windowStart])
+  @@index([windowEnd])
 }
