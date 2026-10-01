@@ -3,9 +3,11 @@ const {
   validateThresholdLevel,
   evaluateThresholds,
 } = require("./thresholdRulesEngine");
+const { generateAssessmentToken } = require("./assessmentService");
+const redisConnection = require("../config/redisConnection");
 const {
-  generateAssessmentToken,
-} = require("./assessmentService");
+  SEARCH_CACHE_VERSION_KEY,
+} = require("./discoveryService");
 
 const getCompanyForUser = async (userId) => {
   const company = await jobRepository.findCompanyByOwner(userId);
@@ -15,6 +17,14 @@ const getCompanyForUser = async (userId) => {
   }
 
   return company;
+};
+
+const invalidateJobSearchCache = async () => {
+  try {
+    await redisConnection.incr(SEARCH_CACHE_VERSION_KEY);
+  } catch (error) {
+    console.error("Job search cache invalidation error:", error.message);
+  }
 };
 
 const createJob = async (userId, payload) => {
@@ -42,14 +52,13 @@ const createJob = async (userId, payload) => {
 
   const competencyIds = [
     ...new Set(
-      skillThresholds.map(
-        (threshold) => threshold.competencyId
-      )
+      skillThresholds.map((threshold) => threshold.competencyId)
     ),
   ];
 
-  const competencies =
-    await jobRepository.findCompetenciesByIds(competencyIds);
+  const competencies = await jobRepository.findCompetenciesByIds(
+    competencyIds
+  );
 
   if (competencies.length !== competencyIds.length) {
     throw new Error("One or more competency IDs are invalid");
@@ -57,7 +66,7 @@ const createJob = async (userId, payload) => {
 
   const assessmentToken = generateAssessmentToken();
 
-  return jobRepository.createJob(company.id, {
+  const job = await jobRepository.createJob(company.id, {
     title,
     description,
     location,
@@ -65,21 +74,21 @@ const createJob = async (userId, payload) => {
     skillThresholds,
     assessmentToken,
   });
+
+  await invalidateJobSearchCache();
+
+  return job;
 };
 
 const getCompanyJobs = async (userId) => {
   const company = await getCompanyForUser(userId);
-
   return jobRepository.findCompanyJobs(company.id);
 };
 
 const getCompanyJob = async (userId, jobId) => {
   const company = await getCompanyForUser(userId);
 
-  const job = await jobRepository.findCompanyJob(
-    company.id,
-    jobId
-  );
+  const job = await jobRepository.findCompanyJob(company.id, jobId);
 
   if (!job) {
     throw new Error("Job not found");
@@ -88,26 +97,16 @@ const getCompanyJob = async (userId, jobId) => {
   return job;
 };
 
-const evaluateJob = async (
-  userId,
-  jobId,
-  candidateSkills
-) => {
+const evaluateJob = async (userId, jobId, candidateSkills) => {
   const company = await getCompanyForUser(userId);
 
-  const job = await jobRepository.findCompanyJob(
-    company.id,
-    jobId
-  );
+  const job = await jobRepository.findCompanyJob(company.id, jobId);
 
   if (!job) {
     throw new Error("Job not found");
   }
 
-  return evaluateThresholds(
-    job.thresholds,
-    candidateSkills
-  );
+  return evaluateThresholds(job.thresholds, candidateSkills);
 };
 
 module.exports = {
