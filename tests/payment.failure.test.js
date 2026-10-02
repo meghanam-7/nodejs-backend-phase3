@@ -310,3 +310,63 @@ describe("Payment Failure Handling", () => {
     });
   });
 });
+
+describe("Payment Concurrency and Idempotency", () => {
+  test("prevents duplicate payment orders under concurrent retries", async () => {
+    const idempotencyKey = "concurrent-test-key";
+
+    const existingPayment = {
+      id: 1,
+      userId: 1,
+      jobId: 1,
+      amount: 1000,
+      currency: "INR",
+      status: "CREATED",
+      razorpayOrderId: "order_existing",
+      receipt: "receipt_existing",
+      idempotencyKey,
+    };
+
+    paymentRepository.findPaymentByIdempotencyKey.mockImplementation(
+      async () => {
+        await new Promise((resolve) => setTimeout(resolve, 10));
+        return null;
+      },
+    );
+
+    paymentRepository.findJobById.mockResolvedValue({
+      id: 1,
+      status: "PUBLISHED",
+    });
+
+    const Razorpay = require("razorpay");
+
+    Razorpay.mockCreate.mockResolvedValue({
+      id: "order_new",
+      amount: 1000,
+      currency: "INR",
+      receipt: "receipt_new",
+    });
+
+    paymentRepository.createPayment.mockImplementation(async () => {
+      throw new Error("Unique constraint failed");
+    });
+
+    paymentRepository.findPaymentByIdempotencyKey
+      .mockImplementationOnce(async () => null)
+      .mockImplementationOnce(async () => null)
+      .mockResolvedValue(existingPayment);
+
+    const results = await Promise.all([
+      paymentService.createPaymentOrder(1, 1, 1000, idempotencyKey),
+      paymentService.createPaymentOrder(1, 1, 1000, idempotencyKey),
+    ]);
+
+    expect(results.some((result) => result.idempotent)).toBe(true);
+    expect(
+      results.filter((result) => result.payment.idempotencyKey === idempotencyKey),
+    ).toHaveLength(2);
+
+    expect(paymentRepository.createPayment).toHaveBeenCalledTimes(2);
+  });
+});
