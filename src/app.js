@@ -93,6 +93,7 @@ const applicationStatusRoutes = require("./routes/applicationStatusRoutes");
 const consentRoutes = require("./routes/consentRoutes");
 const userRoutes = require("./routes/userRoutes");
 const sloRoutes = require("./routes/sloRoutes");
+const growthEventRoutes = require("./routes/growthEventRoutes");
 
 // Public routes
 app.use("/", healthRoutes);
@@ -132,6 +133,8 @@ app.use("/", consentRoutes);
 
 // SLO / Observability routes
 app.use("/", sloRoutes);
+
+app.use("/", growthEventRoutes);
 
 // Payment routes
 // paymentRoutes already defines:

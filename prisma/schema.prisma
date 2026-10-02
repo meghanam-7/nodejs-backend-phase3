@@ -493,3 +493,20 @@ model SloMeasurement {
   @@index([windowStart])
   @@index([windowEnd])
 }
+
+model GrowthEvent {
+  id             Int      @id @default(autoincrement())
+  eventType      String
+  version        Int      @default(1)
+  aggregateType  String
+  aggregateId    String
+  payload        Json
+  idempotencyKey String   @unique
+  status         String   @default("PENDING")
+  createdAt      DateTime @default(now())
+  processedAt    DateTime?
+
+  @@index([status, createdAt])
+  @@index([eventType, createdAt])
+  @@index([aggregateType, aggregateId])
+}
